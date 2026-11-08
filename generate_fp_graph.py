@@ -333,7 +333,7 @@ axs[0].xaxis.set_major_locator(MultipleLocator(1))
 axs[0].xaxis.set_major_formatter(FormatStrFormatter('%s'))
 axs[0].set_xticks(xticks)
 axs[0].set_xticklabels(xlabels, rotation=90)
-axs[0].set_ylabel("VDW Energy")
+axs[0].set_ylabel("VDW Energy (kcal/mol)")
 axs[0].xaxis.grid(which='major', color='black', linestyle='solid')
 
 # set up ES plot area
@@ -343,7 +343,7 @@ axs[1].xaxis.set_major_locator(MultipleLocator(1))
 axs[1].xaxis.set_major_formatter(FormatStrFormatter('%s'))
 axs[1].set_xticks(xticks)
 axs[1].set_xticklabels(xlabels, rotation=90)
-axs[1].set_ylabel("ES Energy")
+axs[1].set_ylabel("ES Energy (kcal/mol)")
 axs[1].xaxis.grid(which='major', color='black', linestyle='solid')
 
 
