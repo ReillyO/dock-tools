@@ -36,6 +36,8 @@ def parse_args():
                         default="no",type=str)
     parser.add_argument("-fo", "--fileout", help="Specifies the name of the output graph for overlaid, or suffix for individual.\
                         Defaults to 'out'", default="out", type=str)
+    parser.add_argument("-c", "--colors", help="Space-separated series of matplotlib colors to use for lines (must be in quotes). Footprints will be colored in order; reference will be the first color.\
+                        Defaults to 'none'", default="none", type=str)
     parser.add_argument("-V", "--verbose", help="[yes, no] Enables verbose program output.", default="no", type=str)
     
     args = parser.parse_args()
@@ -74,6 +76,10 @@ prioritize_ref = args.reference_override
 
 verbose = True if args.verbose == "yes" else False
 plot_all_mols = False
+if args.colors == "none": 
+    user_defined_colors = []
+else:
+    user_defined_colors = [x.strip() for x in args.colors.split()]
 mols_to_include = []
 mol_names = []
 linenum = 0
@@ -148,21 +154,18 @@ with open(fp_infile, 'r') as f:
             perres_data.append(linelist)
             # if this is true, we are in the first molecule AND
             # the user has not provided a separate reference so we save it as the ref
-            if in_first_mol:
+            if in_first_mol and first_mol_ref:
                 residue_names.append(linelist[0])
                 residue_nums.append(int(linelist[1]))
-            if first_mol_ref:
+            
+            if first_mol_ref and in_first_mol:
                 ref_perres_data.append([float(linelist[2]), float(linelist[3])])
-            all_perres_data[mol_name].append([float(linelist[5]), float(linelist[6])])
+            else:
+                all_perres_data[mol_name].append([float(linelist[5]), float(linelist[6])])
         linenum += 1
 
-
-# sanity check # residues now that we know the number of residues in the footprints
-if verbose: print("Sanity checking residue numbers")
-if len(residue_names) < desired_num_to_plot:
-    print(f"More residues were requested for plotting ({desired_num_to_plot}) than exist in the footprints ({len(residue_names)})!")
-    print("Setting number to plot to the number of residues ({len(residue_names)}).")
-    desired_num_to_plot = len(residue_names)
+# if the first mol is the reference, we don't need the name in mol_names
+if first_mol_ref: mol_names.pop(0)
 
 
 # if the user has provided a reference, we read that in and store it as well
@@ -192,8 +195,17 @@ if not first_mol_ref:
             elif data_keyword in line:
                 in_header = False
             elif not in_header:
+                residue_names.append(linelist[0])
+                residue_nums.append(int(linelist[1]))
                 ref_perres_data.append([float(linelist[5]), float(linelist[6])])
             linenum += 1
+
+# sanity check # residues now that we know the number of residues in the footprints
+if verbose: print("Sanity checking residue numbers")
+if len(residue_names) < desired_num_to_plot:
+    print(f"More residues were requested for plotting ({desired_num_to_plot}) than exist in the footprints ({len(residue_names)})!")
+    print(f"Setting number to plot to the number of residues ({len(residue_names)}).")
+    desired_num_to_plot = len(residue_names)
 
 # now that all data is accounted for, we need to figure out what residues
 # should be plotted across all the footprints for consistency
@@ -306,6 +318,16 @@ ref_es_values = []
 xticks = []
 xlabels = []
 
+special_colors = False;
+if len(user_defined_colors) > 0:
+    if len(user_defined_colors) < len(mol_names) and first_mol_ref:
+        print("NOTE: User provided colors, but the wrong number. Lines will be plotted using Matplotlib defaults.")
+    elif len(user_defined_colors) < len(mol_names) + 1 and not first_mol_ref:
+        print("NOTE: User provided colors, but the wrong number. Lines will be plotted using Matplotlib defaults.")
+    else:
+        print(f"NOTE: Using user-provided colors {user_defined_colors}")
+        special_colors = True
+
 # prepare reference values and axis parameters for plotting
 i = 0
 for num in resnums_to_plot:
@@ -334,7 +356,7 @@ axs[0].xaxis.set_major_formatter(FormatStrFormatter('%s'))
 axs[0].set_xticks(xticks)
 axs[0].set_xticklabels(xlabels, rotation=90)
 axs[0].set_ylabel("VDW Energy (kcal/mol)")
-axs[0].xaxis.grid(which='major', color='black', linestyle='solid')
+axs[0].xaxis.grid(which='major', color='grey', linestyle='dashed')
 
 # set up ES plot area
 axs[1].set_ylim(-10, 5)
@@ -344,10 +366,11 @@ axs[1].xaxis.set_major_formatter(FormatStrFormatter('%s'))
 axs[1].set_xticks(xticks)
 axs[1].set_xticklabels(xlabels, rotation=90)
 axs[1].set_ylabel("ES Energy (kcal/mol)")
-axs[1].xaxis.grid(which='major', color='black', linestyle='solid')
+axs[1].xaxis.grid(which='major', color='grey', linestyle='dashed')
 
 
 first_loop = True
+loop = 0
 if verbose: print("Plotting footprints")
 for mol in mol_names:
     # plot the reference first if the plot is blank
@@ -356,8 +379,12 @@ for mol in mol_names:
             line.remove()
         for line in axs[1].lines:
             line.remove()
-        axs[0].plot(xticks, ref_vdw_values, linewidth=lineweight, color="black")
-        axs[1].plot(xticks, ref_es_values, linewidth=lineweight, color="black")    
+        if special_colors:
+            axs[0].plot(xticks, ref_vdw_values, linewidth=lineweight, color=user_defined_colors[0])
+            axs[1].plot(xticks, ref_es_values, linewidth=lineweight, color=user_defined_colors[0])
+        else:
+            axs[0].plot(xticks, ref_vdw_values, linewidth=lineweight, color="black")
+            axs[1].plot(xticks, ref_es_values, linewidth=lineweight, color="black")    
         first_loop = False
     
     vdw_values = []
@@ -377,15 +404,26 @@ for mol in mol_names:
     # use a set color, and save the figure as a PNG
     if individual:
         fig.suptitle(f"{mol} Footprint Plots", size=suptitLS)
-        axs[0].plot(xticks, vdw_values, linewidth=lineweight, color="red")
-        axs[1].plot(xticks, es_values, linewidth=lineweight, color="red")
+       
+        if special_colors: 
+            axs[0].plot(xticks, vdw_values, linewidth=lineweight, color=user_defined_colors[loop + 1])
+            axs[1].plot(xticks, es_values, linewidth=lineweight, color=user_defined_colors[loop + 1])
+        else:
+            axs[0].plot(xticks, vdw_values, linewidth=lineweight, color="red")
+            axs[1].plot(xticks, es_values, linewidth=lineweight, color="red")
         axs[0].legend(['Reference'] + [mol])
         axs[1].legend(['Reference'] + [mol])
         fig.tight_layout()
         plt.savefig(f"{mol}.{out_suff}.png",dpi=300)
     else: # otherwise, let the color cycler auto-generate
-        axs[0].plot(xticks, vdw_values, linewidth=lineweight)
-        axs[1].plot(xticks, es_values, linewidth=lineweight)
+        if special_colors:
+            axs[0].plot(xticks, vdw_values, linewidth=lineweight, color=user_defined_colors[loop + 1])
+            axs[1].plot(xticks, es_values, linewidth=lineweight, color=user_defined_colors[loop + 1])
+        else:
+            axs[0].plot(xticks, vdw_values, linewidth=lineweight)
+            axs[1].plot(xticks, es_values, linewidth=lineweight)
+
+    loop += 1
             
 
 if not individual:
